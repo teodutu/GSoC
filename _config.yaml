@@ -1,0 +1,6 @@
+remote_theme: just-the-docs/just-the-docs
+theme: just-the-docs
+
+plugins:
+  - jekyll-titles-from-headings
+  - jekyll-seo-tag

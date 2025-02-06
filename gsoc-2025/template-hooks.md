@@ -18,7 +18,7 @@ nav_order: 1
 
 High-level language constructs are often compiled into lower-level function calls that implement the same functionality.
 This process is called _lowering_
-It compiler design by offloading complex code into simpler function calls.
+It simplifies compiler design by offloading complex code into simpler function calls.
 These functions are implemented in D's runtime library (called DRuntime) and are commonly called [_runtime hooks_](https://wiki.dlang.org/Runtime_Hooks).
 
 Below is an example of such a runtime hook:
@@ -41,33 +41,8 @@ As shown in the example above, runtime hooks require type information, such as w
 D supports templates, but runtime hooks pre-date the introduction of templates to D.
 Therefore, they retrieve the necessary type information at runtime by receiving an extra argument, whose type is [`TypeInfo`](https://dlang.org/library/object/type_info.html).
 This object contains the size, constructors, destructors and overloaded operators of a given type.
-However, because this information is processed at run time, this approach is slower to the alternative of having the compiler send it to the runtime hook via template arguments.
-Due to D's high flexibility regarding metaprogramming, translating each hook to a template function would allow its code to specialise TODO
-
-So far the following hooks have been converted to templates:
-
-```text
-_d_arrayctor
-_d_arraysetctor
-_d_arrayassign
-_d_arrayassign_l
-_d_arrayassign_r
-_d_delstruct
-_d_newThrowable
-_d_arrayappendT
-_d_arrayappendcTX
-_d_arraycatT
-_d_arraycatnTX
-_d_newitemiT
-_d_newitemT
-_d_newitemU
-_d_newclass
-_d_newarrayiT
-_d_newarrayT
-_d_newarrayU
-_d_newarraymTX
-_d_newarrayOpT
-```
+However, because this information is processed at run time, this approach is slower than the alternative of having the compiler send it to the runtime hook via template arguments.
+Due to D's high flexibility regarding metaprogramming, translating each hook to a template function would allow its code to specialise according to the types of its arguments at compile time.
 
 In general, these are the steps required to convert a runtime hook to a template:
 
@@ -81,7 +56,15 @@ The hooks that are yet to be templated can be split into 2 categories:
 1. [`rt/aa.d`](https://github.com/dlang/dmd/blob/master/druntime/src/rt/aaA.d) implements associative arrays as language builtins.
 This module is made up of multiple hooks, all of them using `TypeInfo`.
 Therefore, this module is to be reimplemented using templates.
-The list of hooks for associative arrays is:
+Associative arrays are defined as an opaque structure called [`Impl`](https://github.com/dlang/dmd/blob/da0fc14189d6614df48cbbf1f5bbf7fc5f93b5f7/druntime/src/rt/aaA.d#L50-L172).
+It receives a `TypeInfo` argument in its constructor.
+This structure is accessed via the runtime hooks listed below.
+The plan for this direction is the following:
+    1. Template the hooks below and temporarily extract the `TypeInfo` structure required by `Impl` from the template arguments using [`typeid`](https://dlang.org/spec/expression.html#TypeidExpression).
+    Each hook will require changes to DRuntime and the compiler.
+    1. Template the `Impl` structure and modify the previously templated hooks to use the template arguments itself instead of `TypeInfo`.
+
+    The list of hooks for associative arrays is:
 
     ```text
     _aaApply
@@ -98,15 +81,20 @@ The list of hooks for associative arrays is:
 1. Somewhat more independent hooks, which still have interdependencies.
 They are mostly implemented in [`rt/lifetime.d`](https://github.com/dlang/dmd/blob/master/druntime/src/rt/lifetime.d).
 A goal of this project is to remove this file and replace all its code with templated implementations.
-The full list is below:
+Each hook can be handled individually and separately.
+There was previous work on `_d_arrayliteralTX` so it might be a good starting point.
+Another promising starting point are `_d_arrayset{capacity,lengthT,lengthiT}` or `_d_arrayappendcTX`.
+The latter three already have wrapper template hooks that call the functions from `rt/lifetime.d`.
+What is needed in their case is to fully move the underlying implementation to the template hooks.
+The full list of hooks is below:
 
     ```text
-    _d_arrayliteralTX
-    _d_assocarrayliteralTX
     _d_arraysetcapacity
     _d_arraysetlengthiT
     _d_arraysetlengthT
     _d_arrayshrinkfit
+    _d_arrayappendcTX
+    _d_arrayliteralTX
     _d_interface_cast
     _d_isbaseof
     _d_isbaseof2
